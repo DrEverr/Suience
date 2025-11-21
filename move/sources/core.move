@@ -1,10 +1,11 @@
 module suience::core;
 
 use sui::tx_context::TxContext;
+use std::string::String;
 
 struct SuiencePlatform has key {
     id: UID,
-    total_papers: u64,
+    total_projects: u64,
     total_researchers: u64,
     total_reviews: u64,
 }
@@ -12,9 +13,8 @@ struct SuiencePlatform has key {
 struct ResearchProfile has key {
     id: UID,
     name: String,
-    papers_published: u64,
+    projects_published: u64,
     reviews_completed: u64,
-    data_shared: u64,
     citation_count: u64,
     reputarion_score: u64,
 }
@@ -27,9 +27,7 @@ struct ResearchProfileCap has key {
 fun init(ctx: &mut TxContext) {
     let platform = SuiencePlatform {
         id: object::new(ctx),
-        total_papers: 0,
         total_researchers: 0,
-        total_reviews: 0,
     };
 
     transfer::share_object(platform);
@@ -44,9 +42,8 @@ public fun create_research_profile(
         id: object::new(ctx),
         name,
         creator: tx_context::sender(ctx),
-        papers_published: 0,
+        projects_published: 0,
         reviews_completed: 0,
-        data_shared: 0,
         citation_count: 0,
         reputarion_score: 0,
     };
@@ -60,6 +57,7 @@ public fun create_research_profile(
     cap
 }
 
+// Register new reaserch profile
 public fun register_research_profile(
     platform: &mut SuiencePlatform,
     name: String,
