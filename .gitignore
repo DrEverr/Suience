@@ -1,3 +1,1 @@
-/ui/node_modules
-/ui/.env
-/move/build
+.DS_Store
