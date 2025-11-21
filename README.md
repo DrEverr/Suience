@@ -20,3 +20,5 @@ and creating fair incentives for scientific collaboration.
 - **🏆 Reputation System**: Transparent, tamper-proof researcher credentials
 
 *Science Flows on Sui* 🌊🔬
+
+Ready to build the future of science on Sui? Let's make Suience happen! 🚀🔬
