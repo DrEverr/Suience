@@ -1,16 +1,15 @@
 import { getFullnodeUrl } from "@mysten/sui/client";
 import { createNetworkConfig } from "@mysten/dapp-kit";
+import { MVR_NAME, TESTNET_PACKAGE_ID } from "./constants";
 
 const { networkConfig, useNetworkVariable, useNetworkVariables } =
   createNetworkConfig({
-    devnet: {
-      url: getFullnodeUrl("devnet"),
-    },
     testnet: {
       url: getFullnodeUrl("testnet"),
-    },
-    mainnet: {
-      url: getFullnodeUrl("mainnet"),
+      variables: {
+        packageId: TESTNET_PACKAGE_ID,
+        mvrName: MVR_NAME,
+      },
     },
   });
 
