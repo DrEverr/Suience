@@ -60,12 +60,12 @@ Check [demo](./demo.md) for more details.
 - [x] Component architecture
 - [x] Navigation system
 
-### Phase 2: Web3 Integration ✅
+### Phase 2: Web3 Integration (TODO)
 
 - [x] Sui wallet connection
 - [x] Smart contract deployment
-- [x] Walrus storage integration
-- [x] Seal access policies
+- [ ] Walrus storage integration
+- [ ] Seal access policies
 
 ### Phase 3: Advanced Features (TODO)
 
