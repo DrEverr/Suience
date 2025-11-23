@@ -1,67 +1,59 @@
 module suience::core;
 
-use sui::tx_context::TxContext;
 use std::string::String;
 
-struct SuiencePlatform has key {
-    id: UID,
-    total_projects: u64,
-    total_researchers: u64,
-    total_reviews: u64,
+public struct SuiencePlatform has key {
+    id: object::UID,
+    total_profiles: u64,
 }
 
-struct ResearchProfile has key {
-    id: UID,
+public struct ResearchProfile has key {
+    id: object::UID,
     name: String,
-    projects_published: u64,
-    reviews_completed: u64,
-    citation_count: u64,
-    reputarion_score: u64,
 }
 
-struct ResearchProfileCap has key {
-    id: UID,
-    profile_id: ID,
+public struct ResearchProfileCap has key {
+    id: object::UID,
+    profile_id: object::ID,
 }
 
-fun init(ctx: &mut TxContext) {
+fun init(ctx: &mut tx_context::TxContext) {
     let platform = SuiencePlatform {
         id: object::new(ctx),
-        total_researchers: 0,
+        total_profiles: 0,
     };
 
-    transfer::share_object(platform);
+    sui::transfer::share_object(platform);
 }
 
 public fun create_research_profile(
     platform: &mut SuiencePlatform,
     name: String,
-    ctx: &mut TxContext
+    ctx: &mut tx_context::TxContext
 ): ResearchProfileCap {
     let profile = ResearchProfile {
         id: object::new(ctx),
         name,
-        creator: tx_context::sender(ctx),
-        projects_published: 0,
-        reviews_completed: 0,
-        citation_count: 0,
-        reputarion_score: 0,
     };
     let cap = ResearchProfileCap {
         id: object::new(ctx),
         profile_id: object::id(&profile),
     };
-
-    platform.total_researchers = platform.total_researchers + 1;
-    transfer::share_object(profile);
+    
+    platform.total_profiles = platform.total_profiles + 1;
+    sui::transfer::share_object(profile);
     cap
 }
 
-// Register new reaserch profile
+// Register new research profile
 public fun register_research_profile(
     platform: &mut SuiencePlatform,
     name: String,
-    ctx: &mut TxContext
+    ctx: &mut tx_context::TxContext
 ) {
-    transfer::transfer(create_research_profile(platform, name, ctx), ctx.sender());
+    sui::transfer::transfer(create_research_profile(platform, name, ctx), tx_context::sender(ctx));
+}
+
+public fun get_profile_id(cap: &ResearchProfileCap): object::ID {
+    cap.profile_id
 }
