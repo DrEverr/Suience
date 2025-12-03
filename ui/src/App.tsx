@@ -46,31 +46,32 @@ function App() {
     });
 
     // find the cap for the given profile id
-    const capId = res.data
+    const capData = res.data
       .map((obj) => {
         const fields = (obj!.data!.content as { fields: any }).fields;
         return {
-          id: fields?.id.id as string,
+          capId: fields?.id.id as string,
           profile_id: fields?.profile_id as string,
         };
       });
 
-    if (capId.length === 0) {
+    if (capData.length === 0) {
       return false;
     }
 
-    // load the allowlist for the given id
-    const allowlist = await suiClient.getObject({
-      id: capId[0].profile_id!,
+    // load the profile object
+    const profileObj = await suiClient.getObject({
+      id: capData[0].profile_id!,
       options: { showContent: true },
     });
-    const fields = (allowlist.data?.content as { fields: any })?.fields || {};
+    const fields = (profileObj.data?.content as { fields: any })?.fields || {};
     setUserProfile({
-      id: capId[0].profile_id!,
-      name: fields.name as string,
+      id: capData[0].profile_id!,
+      capId: capData[0].capId!,
+      name: fields.name as string || "",
       avatar: "👤",
-      bio: "",
-      orcid: "",
+      bio: fields.bio as string || "",
+      orcid: fields.orcid as string || "",
       citations: 0,
       collaborators: 0,
       hIndex: 0,
@@ -83,6 +84,12 @@ function App() {
   }
 
   const checkUserProfile = async () => {
+    if (!currentAccount) {
+      // If wallet not connected, do nothing
+      // User needs to connect wallet first via the Connect button
+      return;
+    }
+
     const hasProfile = await getProfile();
 
     if (hasProfile) {

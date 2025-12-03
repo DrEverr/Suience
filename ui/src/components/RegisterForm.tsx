@@ -57,10 +57,31 @@ export function RegisterForm({ onRegister, onCancel }: RegisterFormProps) {
         ...formData,
       };
       const tx = new Transaction();
+
+      // Get the platform object - we need to query for it
+      const platformObjects = await suiClient.getOwnedObjects({
+        owner: "0x0",
+        options: {
+          showContent: true,
+          showType: true,
+        },
+        filter: {
+          StructType: `${packageId}::core::SuiencePlatform`,
+        },
+      });
+
+      // If no platform found, we need to handle this case
+      // For now, we'll try to use a shared object query
+      const platformId = platformObjects.data[0]?.data?.objectId || "0x0";
+
       tx.moveCall({
         target: `${packageId}::core::register_research_profile`,
-        // We prevalidate that the name exists
-        arguments: [tx.pure.string(newProfile.name)],
+        arguments: [
+          tx.object(platformId),
+          tx.pure.string(newProfile.name),
+          tx.pure.string(newProfile.bio),
+          tx.pure.string(newProfile.orcid),
+        ],
       });
       tx.setGasBudget(10000000);
       signAndExecute(

@@ -10,9 +10,13 @@ import {
   TextField,
 } from "@radix-ui/themes";
 import { useState } from "react";
+import { useSignAndExecuteTransaction, useSuiClient } from "@mysten/dapp-kit";
+import { Transaction } from "@mysten/sui/transactions";
+import { useNetworkVariable } from "../networkConfig";
 
 export interface Profile {
   id: string,
+  capId?: string,
   name: string,
   avatar: string,
   bio: string,
@@ -40,9 +44,26 @@ export function Profile({ userProfile: profile, onNavigate }: ProfileProps) {
     bio: profile.bio,
     orcid: profile.orcid,
   });
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const packageId = useNetworkVariable("packageId");
+  const suiClient = useSuiClient();
 
   const publications: any[] = [];
   const collaborations: any[] = [];
+
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction({
+    execute: async ({ bytes, signature }) =>
+      await suiClient.executeTransactionBlock({
+        transactionBlock: bytes,
+        signature,
+        options: {
+          showRawEffects: true,
+          showEffects: true,
+        },
+      }),
+  });
 
   const handleEditProfile = () => {
     setEditedProfile({
@@ -50,16 +71,64 @@ export function Profile({ userProfile: profile, onNavigate }: ProfileProps) {
       bio: profile.bio,
       orcid: profile.orcid,
     });
+    setError("");
     setIsEditDialogOpen(true);
   };
 
-  const handleSaveProfile = () => {
-    // TODO: Implement actual profile update on blockchain
-    // For now, just close the dialog
-    console.log("Saving profile:", editedProfile);
-    setIsEditDialogOpen(false);
-    // In a real implementation, this would update the profile on-chain
-    // and then refresh the profile data
+  const handleSaveProfile = async () => {
+    if (!profile.capId) {
+      setError("Profile capability not found. Cannot update profile.");
+      return;
+    }
+
+    setIsSaving(true);
+    setError("");
+
+    try {
+      const tx = new Transaction();
+
+      // Get the profile and cap objects
+      const profileObj = tx.object(profile.id);
+      const capObj = tx.object(profile.capId);
+
+      // Call update_profile function
+      tx.moveCall({
+        target: `${packageId}::core::update_profile`,
+        arguments: [
+          profileObj,
+          capObj,
+          tx.pure.string(editedProfile.name),
+          tx.pure.string(editedProfile.bio),
+          tx.pure.string(editedProfile.orcid),
+        ],
+      });
+
+      // Execute transaction
+      await new Promise<void>((resolve, reject) => {
+        signAndExecute(
+          { transaction: tx },
+          {
+            onSuccess: () => {
+              console.log("Profile updated successfully");
+              setIsEditDialogOpen(false);
+              // In a real app, you would refresh the profile data here
+              // For now, we'll just close the dialog
+              resolve();
+            },
+            onError: (error) => {
+              console.error("Transaction failed:", error);
+              setError(`Failed to update profile: ${error.message}`);
+              reject(error);
+            },
+          }
+        );
+      });
+    } catch (error: any) {
+      console.error("Update failed:", error);
+      setError(error.message || "Failed to update profile. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -320,6 +389,7 @@ export function Profile({ userProfile: profile, onNavigate }: ProfileProps) {
                 onChange={(e) =>
                   setEditedProfile({ ...editedProfile, name: e.target.value })
                 }
+                disabled={isSaving}
               />
             </Box>
 
@@ -333,6 +403,7 @@ export function Profile({ userProfile: profile, onNavigate }: ProfileProps) {
                 onChange={(e) =>
                   setEditedProfile({ ...editedProfile, bio: e.target.value })
                 }
+                disabled={isSaving}
               />
             </Box>
 
@@ -346,17 +417,28 @@ export function Profile({ userProfile: profile, onNavigate }: ProfileProps) {
                 onChange={(e) =>
                   setEditedProfile({ ...editedProfile, orcid: e.target.value })
                 }
+                disabled={isSaving}
               />
             </Box>
+
+            {error && (
+              <Box p="2" style={{ background: "var(--red-a2)", borderRadius: "4px" }}>
+                <Text size="2" style={{ color: "var(--red-11)" }}>
+                  {error}
+                </Text>
+              </Box>
+            )}
           </Flex>
 
           <Flex gap="3" mt="4" justify="end">
             <Dialog.Close>
-              <Button variant="soft" color="gray">
+              <Button variant="soft" color="gray" disabled={isSaving}>
                 Cancel
               </Button>
             </Dialog.Close>
-            <Button onClick={handleSaveProfile}>Save Changes</Button>
+            <Button onClick={handleSaveProfile} disabled={isSaving}>
+              {isSaving ? "Saving..." : "Save Changes"}
+            </Button>
           </Flex>
         </Dialog.Content>
       </Dialog.Root>
