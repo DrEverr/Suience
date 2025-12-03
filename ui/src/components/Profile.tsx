@@ -6,7 +6,10 @@ import {
   Button,
   Text,
   Card,
+  Dialog,
+  TextField,
 } from "@radix-ui/themes";
+import { useState } from "react";
 
 export interface Profile {
   id: string,
@@ -31,9 +34,33 @@ interface ProfileProps {
 }
 
 export function Profile({ userProfile: profile, onNavigate }: ProfileProps) {
-  const publications: any[] = [];
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editedProfile, setEditedProfile] = useState({
+    name: profile.name,
+    bio: profile.bio,
+    orcid: profile.orcid,
+  });
 
+  const publications: any[] = [];
   const collaborations: any[] = [];
+
+  const handleEditProfile = () => {
+    setEditedProfile({
+      name: profile.name,
+      bio: profile.bio,
+      orcid: profile.orcid,
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleSaveProfile = () => {
+    // TODO: Implement actual profile update on blockchain
+    // For now, just close the dialog
+    console.log("Saving profile:", editedProfile);
+    setIsEditDialogOpen(false);
+    // In a real implementation, this would update the profile on-chain
+    // and then refresh the profile data
+  };
 
   return (
     <Container size="2" px="4" py="4">
@@ -70,13 +97,7 @@ export function Profile({ userProfile: profile, onNavigate }: ProfileProps) {
         </Card>
 
         <Flex direction="column" gap="2">
-          <Button
-            size="3"
-            onClick={() => {
-              // TODO: Implement edit profile functionality
-              console.log("Edit profile clicked");
-            }}
-          >
+          <Button size="3" onClick={handleEditProfile}>
             Edit Profile
           </Button>
 
@@ -279,6 +300,66 @@ export function Profile({ userProfile: profile, onNavigate }: ProfileProps) {
           </Flex>
         </Card>
       </Box>
+
+      {/* Edit Profile Dialog */}
+      <Dialog.Root open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <Dialog.Content style={{ maxWidth: 450 }}>
+          <Dialog.Title>Edit Profile</Dialog.Title>
+          <Dialog.Description size="2" mb="4">
+            Update your research profile information
+          </Dialog.Description>
+
+          <Flex direction="column" gap="3">
+            <Box>
+              <Text as="label" size="2" weight="medium" mb="2" style={{ display: "block" }}>
+                Name
+              </Text>
+              <TextField.Root
+                placeholder="Your name"
+                value={editedProfile.name}
+                onChange={(e) =>
+                  setEditedProfile({ ...editedProfile, name: e.target.value })
+                }
+              />
+            </Box>
+
+            <Box>
+              <Text as="label" size="2" weight="medium" mb="2" style={{ display: "block" }}>
+                Bio
+              </Text>
+              <TextField.Root
+                placeholder="Tell us about your research interests..."
+                value={editedProfile.bio}
+                onChange={(e) =>
+                  setEditedProfile({ ...editedProfile, bio: e.target.value })
+                }
+              />
+            </Box>
+
+            <Box>
+              <Text as="label" size="2" weight="medium" mb="2" style={{ display: "block" }}>
+                ORCID ID
+              </Text>
+              <TextField.Root
+                placeholder="0000-0000-0000-0000"
+                value={editedProfile.orcid}
+                onChange={(e) =>
+                  setEditedProfile({ ...editedProfile, orcid: e.target.value })
+                }
+              />
+            </Box>
+          </Flex>
+
+          <Flex gap="3" mt="4" justify="end">
+            <Dialog.Close>
+              <Button variant="soft" color="gray">
+                Cancel
+              </Button>
+            </Dialog.Close>
+            <Button onClick={handleSaveProfile}>Save Changes</Button>
+          </Flex>
+        </Dialog.Content>
+      </Dialog.Root>
     </Container>
   );
 }

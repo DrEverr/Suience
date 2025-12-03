@@ -7,6 +7,9 @@ import {
   Text,
   Card,
 } from "@radix-ui/themes";
+import { useState, useEffect } from "react";
+import { useSuiClient, useCurrentAccount } from "@mysten/dapp-kit";
+import { useNetworkVariable } from "../networkConfig";
 
 interface DashboardProps {
   onNavigate: (
@@ -15,15 +18,73 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onNavigate }: DashboardProps) {
-  // TODO: Replace with actual Web3 data
-  const stats = {
+  const [stats, setStats] = useState({
     publications: 0,
     reviews: 0,
     tokens: 0,
     collaborations: 0,
-  };
+  });
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const recentActivity: any[] = [];
+  const packageId = useNetworkVariable("packageId");
+  const suiClient = useSuiClient();
+  const currentAccount = useCurrentAccount();
+
+  useEffect(() => {
+    if (currentAccount) {
+      loadDashboardData();
+    }
+  }, [currentAccount, packageId]);
+
+  async function loadDashboardData() {
+    try {
+      setLoading(true);
+
+      // Load user's projects (publications)
+      const projectsResponse = await suiClient.getOwnedObjects({
+        owner: currentAccount?.address!,
+        options: {
+          showContent: true,
+          showType: true,
+        },
+        filter: {
+          StructType: `${packageId}::project::ProjectCap`,
+        },
+      });
+
+      const publications = projectsResponse.data.length;
+
+      // Load SUI balance for tokens
+      const balance = await suiClient.getBalance({
+        owner: currentAccount?.address!,
+      });
+
+      const tokens = parseInt(balance.totalBalance) / 1_000_000_000; // Convert MIST to SUI
+
+      // Build recent activity
+      const activity = projectsResponse.data.slice(0, 5).map((obj, index) => ({
+        id: obj.data?.objectId || `activity-${index}`,
+        title: "Research Project Created",
+        type: "publication",
+        status: "Completed",
+        date: new Date().toLocaleDateString(),
+      }));
+
+      setStats({
+        publications,
+        reviews: 0, // TODO: Implement review tracking
+        tokens: Math.round(tokens * 100) / 100,
+        collaborations: 0, // TODO: Implement collaboration tracking
+      });
+
+      setRecentActivity(activity);
+    } catch (error) {
+      console.error("Error loading dashboard data:", error);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <Container size="2" px="4" py="4">
@@ -33,9 +94,19 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           My Suience Dashboard
         </Heading>
         <Text color="gray" size="3">
-          Welcome back! Here's your research activity overview.
+          {currentAccount
+            ? "Welcome back! Here's your research activity overview."
+            : "Connect your wallet to view your dashboard."}
         </Text>
       </Box>
+
+      {loading && currentAccount && (
+        <Box p="4" style={{ textAlign: "center" }}>
+          <Text size="3" color="gray">
+            Loading dashboard data...
+          </Text>
+        </Box>
+      )}
 
       {/* Stats Cards */}
       <Flex direction="column" gap="4" mb="6">

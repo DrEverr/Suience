@@ -6,8 +6,11 @@ import {
   Button,
   Text,
   TextField,
+  Card,
 } from "@radix-ui/themes";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSuiClient, useCurrentAccount } from "@mysten/dapp-kit";
+import { useNetworkVariable } from "../networkConfig";
 
 interface ResearchFeedProps {
   onNavigate: (
@@ -15,18 +18,88 @@ interface ResearchFeedProps {
   ) => void;
 }
 
+interface ResearchProject {
+  id: string;
+  name: string;
+  author: string;
+  authorAddress: string;
+  timestamp: number;
+  papers: string[];
+  data: string[];
+}
+
 export function ResearchFeed({ onNavigate }: ResearchFeedProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [projects, setProjects] = useState<ResearchProject[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // TODO: Replace with actual Web3 research data from blockchain
+  const packageId = useNetworkVariable("packageId");
+  const suiClient = useSuiClient();
+  const currentAccount = useCurrentAccount();
+
+  // Load research projects from blockchain
+  useEffect(() => {
+    loadProjects();
+  }, [currentAccount, packageId]);
+
+  async function loadProjects() {
+    try {
+      setLoading(true);
+
+      // Get all shared Project objects
+      const projectsResponse = await suiClient.getOwnedObjects({
+        owner: currentAccount?.address || "0x0",
+        options: {
+          showContent: true,
+          showType: true,
+        },
+      });
+
+      const loadedProjects: ResearchProject[] = [];
+
+      for (const obj of projectsResponse.data) {
+        if (obj.data?.content && "fields" in obj.data.content) {
+          const fields = obj.data.content.fields as any;
+          if (fields.name) {
+            loadedProjects.push({
+              id: obj.data.objectId,
+              name: fields.name || "Untitled Project",
+              author: "Researcher",
+              authorAddress: currentAccount?.address || "",
+              timestamp: Date.now(),
+              papers: [],
+              data: [],
+            });
+          }
+        }
+      }
+
+      setProjects(loadedProjects);
+    } catch (error) {
+      console.error("Error loading projects:", error);
+      setProjects([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const categories = [
-    { id: "all", label: "All Research", count: 0 },
+    { id: "all", label: "All Research", count: projects.length },
     { id: "quantum", label: "Quantum Computing", count: 0 },
     { id: "ai", label: "Artificial Intelligence", count: 0 },
     { id: "climate", label: "Climate Science", count: 0 },
     { id: "medical", label: "Medical Research", count: 0 },
   ];
+
+  // Filter projects based on search query
+  const filteredProjects = projects.filter((project) => {
+    const matchesSearch =
+      searchQuery === "" ||
+      project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.author.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch;
+  });
 
   return (
     <Container size="2" px="4" py="4">
@@ -75,28 +148,79 @@ export function ResearchFeed({ onNavigate }: ResearchFeedProps) {
       </Box>
 
       {/* Research Posts */}
-      <Box p="4" style={{ textAlign: "center" }}>
-        <Text size="5" style={{ display: "block", marginBottom: "16px" }}>
-          🔬
-        </Text>
-        <Text size="4" weight="medium" mb="2" style={{ display: "block" }}>
-          No Research Available
-        </Text>
-        <Text size="3" color="gray" mb="4" style={{ display: "block" }}>
-          Connect your wallet to view research publications, or be the first to
-          upload research to Suience!
-        </Text>
-        <Button
-          size="3"
-          onClick={() => onNavigate("upload")}
-          style={{
-            background: "linear-gradient(135deg, #4E9BF1, #00D4FF)",
-            border: "none",
-          }}
-        >
-          Upload First Research
-        </Button>
-      </Box>
+      {loading ? (
+        <Box p="4" style={{ textAlign: "center" }}>
+          <Text size="3" color="gray">
+            Loading research...
+          </Text>
+        </Box>
+      ) : filteredProjects.length > 0 ? (
+        <Flex direction="column" gap="4">
+          {filteredProjects.map((project) => (
+            <Card key={project.id} size="3">
+              <Flex direction="column" gap="3">
+                <Box>
+                  <Text size="4" weight="bold" mb="2" style={{ display: "block" }}>
+                    {project.name}
+                  </Text>
+                  <Flex align="center" gap="2" mb="2">
+                    <Text size="2" color="gray">
+                      by {project.author}
+                    </Text>
+                    <Text size="2" color="gray">
+                      •
+                    </Text>
+                    <Text size="2" color="gray">
+                      {new Date(project.timestamp).toLocaleDateString()}
+                    </Text>
+                  </Flex>
+                </Box>
+                <Flex justify="between" align="center">
+                  <Flex gap="3">
+                    {project.papers.length > 0 && (
+                      <Text size="2" style={{ color: "#4E9BF1" }}>
+                        📄 {project.papers.length} papers
+                      </Text>
+                    )}
+                    {project.data.length > 0 && (
+                      <Text size="2" style={{ color: "#4E9BF1" }}>
+                        💾 {project.data.length} datasets
+                      </Text>
+                    )}
+                  </Flex>
+                  <Button size="2" variant="soft">
+                    View Details
+                  </Button>
+                </Flex>
+              </Flex>
+            </Card>
+          ))}
+        </Flex>
+      ) : (
+        <Box p="4" style={{ textAlign: "center" }}>
+          <Text size="5" style={{ display: "block", marginBottom: "16px" }}>
+            🔬
+          </Text>
+          <Text size="4" weight="medium" mb="2" style={{ display: "block" }}>
+            No Research Available
+          </Text>
+          <Text size="3" color="gray" mb="4" style={{ display: "block" }}>
+            {currentAccount
+              ? "Be the first to upload research to Suience!"
+              : "Connect your wallet to view research publications!"}
+          </Text>
+          <Button
+            size="3"
+            onClick={() => onNavigate("upload")}
+            style={{
+              background: "linear-gradient(135deg, #4E9BF1, #00D4FF)",
+              border: "none",
+            }}
+          >
+            Upload First Research
+          </Button>
+        </Box>
+      )}
 
       {/* Quick Actions FAB */}
       <Box position="fixed" bottom="20px" right="20px" style={{ zIndex: 10 }}>

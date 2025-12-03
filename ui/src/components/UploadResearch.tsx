@@ -10,8 +10,8 @@ import {
 } from "@radix-ui/themes";
 import { useState } from "react";
 import { useNetworkVariable } from "../networkConfig";
-import { useSignAndExecuteTransaction, useSuiClient } from "@mysten/dapp-kit";
-import { SealClient } from "@mysten/seal";
+import { useSignAndExecuteTransaction, useSuiClient, useCurrentAccount } from "@mysten/dapp-kit";
+import { Transaction } from "@mysten/sui/transactions";
 
 interface UploadResearchProps {
   onNavigate: (
@@ -22,27 +22,15 @@ interface UploadResearchProps {
 export function UploadResearch({ onNavigate }: UploadResearchProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
+  const [error, setError] = useState("");
 
-  const SUI_VIEW_TX_URL = `https://suiscan.xyz/testnet/tx`;
-  const SUI_VIEW_OBJECT_URL = `https://suiscan.xyz/testnet/object`;
+  const WALRUS_PUBLISHER = "https://publisher.walrus-testnet.walrus.space";
 
   const NUM_EPOCH = 10;
   const packageId = useNetworkVariable("packageId");
   const suiClient = useSuiClient();
-
-  // Verified key servers https://seal-docs.wal.app/Pricing/#verified-key-servers
-  const serverObjectIds = [
-    "0x73d05d62c18d9374e3ea529e8e0ed6161da1a141a94d3f76ae3fe4e99356db75",
-    "0xf5d14a81a982144ae441cd7d64b09027f116a468bd36e7eca494f750591623c8",
-  ];
-  const client = new SealClient({
-    suiClient,
-    serverConfigs: serverObjectIds.map((id) => ({
-      objectId: id,
-      weight: 1,
-    })),
-    verifyKeyServers: false,
-  });
+  const currentAccount = useCurrentAccount();
 
   const [researchData, setResearchData] = useState({
     title: "",
@@ -110,23 +98,153 @@ export function UploadResearch({ onNavigate }: UploadResearchProps) {
       }),
   });
 
+  // Upload file to Walrus
+  async function uploadToWalrus(file: File): Promise<string | null> {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch(`${WALRUS_PUBLISHER}/v1/store?epochs=${NUM_EPOCH}`, {
+        method: "PUT",
+        body: file,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Walrus upload failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.newlyCreated) {
+        return result.newlyCreated.blobObject.blobId;
+      } else if (result.alreadyCertified) {
+        return result.alreadyCertified.blobId;
+      }
+
+      return null;
+    } catch (error) {
+      console.error("Error uploading to Walrus:", error);
+      throw error;
+    }
+  }
+
+  // Get or create research profile
+  async function getOrCreateProfile(): Promise<{ profileId: string; capId: string } | null> {
+    try {
+      // Check if user has a profile
+      const res = await suiClient.getOwnedObjects({
+        owner: currentAccount?.address!,
+        options: {
+          showContent: true,
+          showType: true,
+        },
+        filter: {
+          StructType: `${packageId}::core::ResearchProfileCap`,
+        },
+      });
+
+      if (res.data.length > 0) {
+        const fields = (res.data[0]!.data!.content as { fields: any }).fields;
+        return {
+          profileId: fields.profile_id as string,
+          capId: fields.id.id as string,
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error("Error checking profile:", error);
+      return null;
+    }
+  }
+
   const handleSubmit = async () => {
+    if (!currentAccount) {
+      setError("Please connect your wallet first");
+      return;
+    }
+
     setIsUploading(true);
+    setError("");
 
     try {
-      // TODO: Implement Web3 research upload to Sui blockchain
-      // 1. Upload files to Walrus storage
-      // 2. Create research object on Sui blockchain
-      // 3. Set access policies using Seal
-      // 4. Notify peer review network
+      // Step 1: Get or create profile
+      setUploadStatus("Checking profile...");
+      const profile = await getOrCreateProfile();
 
-      // TODO: Simulate upload process - replace with actual implementation
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      if (!profile) {
+        setError("Please create a research profile first");
+        setIsUploading(false);
+        return;
+      }
 
-      // Navigate back to feed or dashboard
-      onNavigate("feed");
-    } catch (error) {
+      // Step 2: Upload manuscript to Walrus
+      let manuscriptBlobId: string | null = null;
+      if (researchData.manuscriptFile) {
+        setUploadStatus("Uploading manuscript to Walrus...");
+        manuscriptBlobId = await uploadToWalrus(researchData.manuscriptFile);
+        if (!manuscriptBlobId) {
+          throw new Error("Failed to upload manuscript");
+        }
+      }
+
+      // Step 3: Upload data files to Walrus
+      const dataBlobIds: string[] = [];
+      if (researchData.dataFiles.length > 0) {
+        setUploadStatus(`Uploading ${researchData.dataFiles.length} data files...`);
+        for (const file of researchData.dataFiles) {
+          const blobId = await uploadToWalrus(file);
+          if (blobId) {
+            dataBlobIds.push(blobId);
+          }
+        }
+      }
+
+      // Step 4: Create project on blockchain
+      setUploadStatus("Creating project on blockchain...");
+      const tx = new Transaction();
+
+      // Get the profile object
+      const profileObj = tx.object(profile.profileId);
+      const capObj = tx.object(profile.capId);
+
+      // Create project
+      const [projectCap] = tx.moveCall({
+        target: `${packageId}::project::create_project`,
+        arguments: [
+          profileObj,
+          capObj,
+          tx.pure.string(researchData.title),
+        ],
+      });
+
+      // Transfer the project cap to the sender
+      tx.transferObjects([projectCap], tx.pure.address(currentAccount.address));
+
+      // Execute transaction
+      await new Promise<void>((resolve, reject) => {
+        signAndExecute(
+          { transaction: tx },
+          {
+            onSuccess: (result) => {
+              console.log("Project created:", result);
+              setUploadStatus("Research published successfully!");
+              setTimeout(() => {
+                onNavigate("feed");
+              }, 2000);
+              resolve();
+            },
+            onError: (error) => {
+              console.error("Transaction failed:", error);
+              setError(`Failed to create project: ${error.message}`);
+              reject(error);
+            },
+          }
+        );
+      });
+    } catch (error: any) {
       console.error("Upload failed:", error);
+      setError(error.message || "Upload failed. Please try again.");
     } finally {
       setIsUploading(false);
     }
@@ -544,6 +662,26 @@ export function UploadResearch({ onNavigate }: UploadResearchProps) {
         {currentStep === 4 && renderStep4()}
       </Box>
 
+      {/* Upload Status */}
+      {(uploadStatus || error) && (
+        <Box mb="4">
+          {uploadStatus && (
+            <Card size="2" style={{ background: "var(--blue-a2)" }}>
+              <Text size="2" style={{ color: "#4E9BF1" }}>
+                {uploadStatus}
+              </Text>
+            </Card>
+          )}
+          {error && (
+            <Card size="2" style={{ background: "var(--red-a2)" }}>
+              <Text size="2" style={{ color: "var(--red-11)" }}>
+                {error}
+              </Text>
+            </Card>
+          )}
+        </Box>
+      )}
+
       {/* Navigation Buttons */}
       <Flex justify="between" gap="3">
         <Button
@@ -556,6 +694,7 @@ export function UploadResearch({ onNavigate }: UploadResearchProps) {
               onNavigate("dashboard");
             }
           }}
+          disabled={isUploading}
         >
           {currentStep > 1 ? "Previous" : "Cancel"}
         </Button>
@@ -580,7 +719,7 @@ export function UploadResearch({ onNavigate }: UploadResearchProps) {
             onClick={handleSubmit}
             disabled={!isStepValid(currentStep) || isUploading}
             style={{
-              background: isStepValid(currentStep)
+              background: isStepValid(currentStep) && !isUploading
                 ? "linear-gradient(135deg, #4E9BF1, #00D4FF)"
                 : undefined,
               border: "none",
