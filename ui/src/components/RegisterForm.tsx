@@ -34,6 +34,7 @@ export function RegisterForm({ onRegister, onCancel }: RegisterFormProps) {
 
   // Hooks must be called at the top level of the component
   const packageId = useNetworkVariable('packageId');
+  const platformId = useNetworkVariable('suinetId');
   const suiClient = useSuiClient();
   const { mutate: signAndExecute } = useSignAndExecuteTransaction({
     execute: async ({ bytes, signature }) =>
@@ -59,55 +60,6 @@ export function RegisterForm({ onRegister, onCancel }: RegisterFormProps) {
         ...formData,
       };
       const tx = new Transaction();
-
-      // Query for the shared SuiencePlatform object by looking at package publish events
-      let platformId: string | null = null;
-
-      try {
-        // Query for the package publish transaction to find the platform object
-        const events = await suiClient.queryEvents({
-          query: {
-            MoveModule: {
-              package: packageId,
-              module: "core",
-            },
-          },
-          limit: 10,
-        });
-
-        // Look for the platform object in recent transactions
-        // The platform is created in the init function and shared
-        // We can also try to get it from the package's created objects
-        if (events.data.length > 0) {
-          // Get the transaction that created the module
-          const txDigest = events.data[0].id.txDigest;
-          const txResponse = await suiClient.getTransactionBlock({
-            digest: txDigest,
-            options: {
-              showObjectChanges: true,
-            },
-          });
-
-          // Find the SuiencePlatform object
-          const platformObject = txResponse.objectChanges?.find(
-            (change) =>
-              change.type === "created" &&
-              change.objectType === `${packageId}::core::SuiencePlatform`
-          );
-
-          if (platformObject && platformObject.type === "created") {
-            platformId = platformObject.objectId;
-          }
-        }
-      } catch (error) {
-        console.error("Error querying platform object:", error);
-      }
-
-      if (!platformId) {
-        throw new Error(
-          "Platform object not found. The contract may need to be deployed or initialized first."
-        );
-      }
 
       tx.moveCall({
         target: `${packageId}::core::register_research_profile`,
