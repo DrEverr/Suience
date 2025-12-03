@@ -60,29 +60,62 @@ export function RegisterForm({ onRegister, onCancel }: RegisterFormProps) {
       };
       const tx = new Transaction();
 
-      // Get the platform object - we need to query for it
-      const platformObjects = await suiClient.getOwnedObjects({
-        owner: "0x0",
-        options: {
-          showContent: true,
-          showType: true,
-        },
-        filter: {
-          StructType: `${packageId}::core::SuiencePlatform`,
-        },
-      });
+      // Query for the shared SuiencePlatform object by looking at package publish events
+      let platformId: string | null = null;
 
-      // If no platform found, we need to handle this case
-      // For now, we'll try to use a shared object query
-      const platformId = platformObjects.data[0]?.data?.objectId || "0x0";
+      try {
+        // Query for the package publish transaction to find the platform object
+        const events = await suiClient.queryEvents({
+          query: {
+            MoveModule: {
+              package: packageId,
+              module: "core",
+            },
+          },
+          limit: 10,
+        });
+
+        // Look for the platform object in recent transactions
+        // The platform is created in the init function and shared
+        // We can also try to get it from the package's created objects
+        if (events.data.length > 0) {
+          // Get the transaction that created the module
+          const txDigest = events.data[0].id.txDigest;
+          const txResponse = await suiClient.getTransactionBlock({
+            digest: txDigest,
+            options: {
+              showObjectChanges: true,
+            },
+          });
+
+          // Find the SuiencePlatform object
+          const platformObject = txResponse.objectChanges?.find(
+            (change) =>
+              change.type === "created" &&
+              change.objectType === `${packageId}::core::SuiencePlatform`
+          );
+
+          if (platformObject && platformObject.type === "created") {
+            platformId = platformObject.objectId;
+          }
+        }
+      } catch (error) {
+        console.error("Error querying platform object:", error);
+      }
+
+      if (!platformId) {
+        throw new Error(
+          "Platform object not found. The contract may need to be deployed or initialized first."
+        );
+      }
 
       tx.moveCall({
         target: `${packageId}::core::register_research_profile`,
         arguments: [
           tx.object(platformId),
           tx.pure.string(newProfile.name),
-          //tx.pure.string(newProfile.bio),
-          //tx.pure.string(newProfile.orcid),
+          tx.pure.string(newProfile.bio),
+          tx.pure.string(newProfile.orcid),
         ],
       });
       tx.setGasBudget(10000000);
