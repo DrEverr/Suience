@@ -124,3 +124,8 @@ fun check_policy(caller: address, id: vector<u8>, project: &Project): bool {
 entry fun seal_approve(id: vector<u8>, project: &Project, ctx: &tx_context::TxContext) {
     assert!(check_policy(tx_context::sender(ctx), id, project), ENoAccess);
 }
+
+#[test_only]
+public fun project_id(project: &Project): &object::UID {
+    &project.id
+}

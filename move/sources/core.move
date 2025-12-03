@@ -57,3 +57,12 @@ public fun register_research_profile(
 public fun get_profile_id(cap: &ResearchProfileCap): object::ID {
     cap.profile_id
 }
+
+public fun total_profiles(platform: &SuiencePlatform): u64 {
+    platform.total_profiles
+}
+
+#[test_only]
+public fun init_for_testing(ctx: &mut tx_context::TxContext) {
+    init(ctx);
+}
