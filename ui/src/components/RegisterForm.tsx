@@ -32,25 +32,27 @@ export function RegisterForm({ onRegister, onCancel }: RegisterFormProps) {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Hooks must be called at the top level of the component
+  const packageId = useNetworkVariable('packageId');
+  const suiClient = useSuiClient();
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction({
+    execute: async ({ bytes, signature }) =>
+      await suiClient.executeTransactionBlock({
+        transactionBlock: bytes,
+        signature,
+        options: {
+          showRawEffects: true,
+          showEffects: true,
+        },
+      }),
+  });
+
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    const packageId = useNetworkVariable('packageId');
-    const suiClient = useSuiClient();
-    const { mutate: signAndExecute } = useSignAndExecuteTransaction({
-      execute: async ({ bytes, signature }) =>
-        await suiClient.executeTransactionBlock({
-          transactionBlock: bytes,
-          signature,
-          options: {
-            showRawEffects: true,
-            showEffects: true,
-          },
-        }),
-    });
 
     try {
       const newProfile = {
@@ -79,8 +81,8 @@ export function RegisterForm({ onRegister, onCancel }: RegisterFormProps) {
         arguments: [
           tx.object(platformId),
           tx.pure.string(newProfile.name),
-          tx.pure.string(newProfile.bio),
-          tx.pure.string(newProfile.orcid),
+          //tx.pure.string(newProfile.bio),
+          //tx.pure.string(newProfile.orcid),
         ],
       });
       tx.setGasBudget(10000000);
